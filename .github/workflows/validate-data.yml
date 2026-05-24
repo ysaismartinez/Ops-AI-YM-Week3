@@ -28,7 +28,6 @@ jobs:
       - name: Run data quality validation
         id: validate
         run: |
-          cd week3
           # TODO: Implement this
           # - Load and split the corrupted parquet (pre/post Jan 16)
           # - Run your validation checks
