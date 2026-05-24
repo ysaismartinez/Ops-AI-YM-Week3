@@ -1,0 +1,13 @@
+import pandas as pd
+
+CUTOFF = pd.Timestamp("2026-01-16")
+
+df = pd.read_parquet('week3/data/demand_enriched_corrupted.parquet')
+baseline = df[df['time_bucket'] < CUTOFF]   # clean historical window
+corrupted = df[df['time_bucket'] >= CUTOFF]  # new potentially corrupted window
+
+print(f"Baseline: {len(baseline)} rows")
+print(f"Corrupted: {len(corrupted)} rows")
+print(f"\nBaseline columns: {baseline.columns.tolist()}")
+print(f"\nBaseline null rates:\n{baseline.isna().mean()}")
+print(f"\nCorrupted null rates:\n{corrupted.isna().mean()}")

@@ -3,6 +3,8 @@ Precomputes all demand aggregations from demand_enriched.parquet at startup.
 Keeps only ~44K rows in memory (zone × hour × dow profile), not 6.3M raw rows.
 """
 
+import logging
+
 import pandas as pd
 import numpy as np
 from pathlib import Path
@@ -11,11 +13,15 @@ from datetime import datetime, timedelta
 import json
 import requests
 from functools import lru_cache
+from validation.check_data_quality import DataQualityValidator
 
 _ROOT = Path(__file__).parent.parent.parent
 DATA_PATH = _ROOT / "week2" / "data" / "processed" / "demand_enriched.parquet"
 LOOKUP_PATH = _ROOT / "week2" / "metadata" / "Lookups" / "taxi_zone_lookup.csv"
 MODEL_PATH = _ROOT / "week2" / "data" / "processed" / "lgbm_demand_model.txt"
+CORRUPTED_DATA_PATH = _ROOT / "week3" / "data" / "demand_enriched_corrupted.parquet"
+
+logger = logging.getLogger(__name__)
 
 # Fixed reference point: end of 2nd week in Feb 2026 (the latest complete month)
 # Data before this date is actual; from this point forward uses model predictions
@@ -183,6 +189,50 @@ def _load_full_demand():
     df["time_bucket"] = pd.to_datetime(df["time_bucket"])
     return df
 
+
+
+
+def check_and_log_data_quality():
+    """
+    Run data quality validation at API startup and log any issues found.
+
+    This is intentionally graceful: validation problems should be visible to
+    operators through logs, but they should not crash or block the API from
+    starting.
+    """
+    try:
+        logger.info("Starting data quality validation check...")
+
+        df = pd.read_parquet(CORRUPTED_DATA_PATH)
+        df["time_bucket"] = pd.to_datetime(df["time_bucket"])
+
+        baseline_df = df[df["time_bucket"] < "2026-01-16"]
+        corrupted_df = df[df["time_bucket"] >= "2026-01-16"]
+
+        validator = DataQualityValidator(baseline_df=baseline_df)
+        result = validator.validate(corrupted_df)
+
+        if not result["is_valid"]:
+            logger.warning(
+                "Data quality validation found %s issue(s). API will continue running.",
+                result["num_issues"],
+            )
+
+            for issue in result["issues"]:
+                logger.warning(
+                    "[%s] %s: %s",
+                    issue.get("severity", "unknown").upper(),
+                    issue.get("type", "unknown"),
+                    issue.get("description", "No description provided"),
+                )
+        else:
+            logger.info("Data quality validation passed. No issues found.")
+
+    except Exception as e:
+        logger.error("Data quality validation failed to run: %s", e)
+
+
+check_and_log_data_quality()
 
 _profile, _zones_df = _load()
 _zone_map = _zones_df.set_index("zone_id").to_dict("index")

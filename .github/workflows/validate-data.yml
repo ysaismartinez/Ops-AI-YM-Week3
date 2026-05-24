@@ -2,7 +2,7 @@ name: Data Quality Check
 
 on:
   schedule:
-    - cron: '0 * * * *'  # TODO: Choose your frequency (15min? hourly? daily?)
+    - cron: '0 * * * *'  # I kept it hourly.
   push:
     branches: [main]
     paths:
